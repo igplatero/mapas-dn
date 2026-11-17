@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de localización</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600&family=Barlow+Semi+Condensed:wght@700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+:root{
+  --enfasis:#C8202B; --azul:#1F46A0; --texto:#1A1A1A;
+  --territorio:#F2F2F0; --lineas:#BDBDBD; --agua:#DCE6F2;
+  --f-titulos:'Barlow Semi Condensed','Arial Narrow',sans-serif;
+  --f-textos:'Source Serif 4',Georgia,serif;
+  --f-etiquetas:'Barlow',Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--texto);font-family:var(--f-textos)}
+.pieza{max-width:960px;margin:0 auto;padding:16px}
+h1{font:700 clamp(1.7rem,4.5vw,2.7rem)/1.05 var(--f-titulos);margin:0 0 6px}
+.sub{font:400 1.05rem/1.45 var(--f-textos);color:#444;margin:0 0 14px;max-width:62ch}
+#caja{position:relative;height:min(72vh,560px);border-top:3px solid var(--azul);background:var(--territorio)}
+#mapa{position:absolute;inset:0}
+#guia{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+#guia line{stroke:var(--texto);stroke-width:1}
+.nota{position:absolute;z-index:3;max-width:250px;padding:8px 10px;background:rgba(255,255,255,.93);pointer-events:none}
+.nota b{display:block;margin-bottom:3px;font:700 1.12rem/1.1 var(--f-titulos);color:var(--enfasis)}
+.nota span{font:400 .92rem/1.35 var(--f-textos)}
+.fuente{margin:8px 0 0;font:400 .78rem/1.3 var(--f-etiquetas);color:#666}
+</style>
+</head>
+<body>
+<main class="pieza">
+  <h1 id="titulo"></h1>
+  <p class="sub" id="subtitulo"></p>
+  <div id="caja">
+    <div id="mapa" role="img"></div>
+    <svg id="guia" aria-hidden="true"><line id="linea" x1="0" y1="0" x2="0" y2="0"/></svg>
+    <div class="nota" id="nota"><b id="nota-titular"></b><span id="nota-texto"></span></div>
+  </div>
+  <p class="fuente" id="fuente"></p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+/* ============================================================
+   AQUÍ SE EDITA: lo único que cambia de un mapa a otro
+   Atención: las coordenadas van en orden [longitud, latitud]
+   (en Google Maps salen al revés: latitud, longitud)
+   ============================================================ */
+const CONFIG = {
+  titulo: "Accidente en la N-121",
+  subtitulo: "Texto de ejemplo: una frase que explique qué muestra el mapa.",
+  centro: [-1.65, 42.5],   // centro del mapa [longitud, latitud]
+  zoom: 11,                // más alto = más cerca
+  elementos: {             // lo que se resalta en rojo
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {},
+        geometry: { type: "Point", coordinates: [-1.65, 42.5] } }
+      /* Para resaltar un tramo de carretera, añade (con coma antes):
+      { type: "Feature", properties: {},
+        geometry: { type: "LineString",
+          coordinates: [[-1.66, 42.50], [-1.64, 42.51]] } }
+      */
+    ]
+  },
+  anotacion: {
+    punto: [-1.65, 42.5],  // a dónde apunta la línea de la nota
+    titular: "Punto de ejemplo",
+    texto: "Sustituye estas coordenadas por el lugar real del suceso."
+  },
+  fuente: "Mapa: Diario de Noticias. Datos: © colaboradores de OpenStreetMap."
+};
+
+/* Estilo por defecto; si existe ../estilos/estilo.json se usa ese */
+const ESTILO_DEFECTO = {
+  colores: { enfasis:"#C8202B", marca_azul:"#1F46A0", territorio:"#F2F2F0",
+             lineas:"#BDBDBD", agua:"#DCE6F2", texto:"#1A1A1A" },
+  fuentes: { titulos:"'Barlow Semi Condensed','Arial Narrow',sans-serif",
+             textos:"'Source Serif 4',Georgia,serif",
+             etiquetas:"'Barlow',Arial,sans-serif" },
+  etiquetas: { halo:"#FFFFFF", grosor_halo:3 }
+};
+
+async function cargarEstilo(){
+  try{
+    const r = await fetch('../estilos/estilo.json');
+    if(r.ok) return await r.json();
+  }catch(e){}
+  return ESTILO_DEFECTO;
+}
+
+function aplicarEstiloCSS(e){
+  const r = document.documentElement.style;
+  r.setProperty('--enfasis', e.colores.enfasis);
+  r.setProperty('--azul', e.colores.marca_azul);
+  r.setProperty('--texto', e.colores.texto);
+  r.setProperty('--territorio', e.colores.territorio);
+  r.setProperty('--lineas', e.colores.lineas);
+  r.setProperty('--agua', e.colores.agua);
+  r.setProperty('--f-titulos', e.fuentes.titulos);
+  r.setProperty('--f-textos', e.fuentes.textos);
+  r.setProperty('--f-etiquetas', e.fuentes.etiquetas);
+}
+
+/* Pinta la base de OpenStreetMap con los colores del periódico */
+function ajustarBase(map, e){
+  map.getStyle().layers.forEach(l => {
+    try{
+      if(l.type === 'background')
+        map.setPaintProperty(l.id, 'background-color', e.colores.territorio);
+      else if(l.type === 'fill' && /water/.test(l.id))
+        map.setPaintProperty(l.id, 'fill-color', e.colores.agua);
+      else if(l.type === 'line' && /waterway/.test(l.id))
+        map.setPaintProperty(l.id, 'line-color', e.colores.agua);
+      else if(l.type === 'symbol'){
+        map.setPaintProperty(l.id, 'text-halo-color', e.etiquetas.halo);
+        map.setPaintProperty(l.id, 'text-halo-width', e.etiquetas.grosor_halo / 2);
+        map.setPaintProperty(l.id, 'text-color', e.colores.texto);
+      }
+    }catch(err){}
+  });
+}
+
+function dibujarResalte(map, e){
+  const rojo = e.colores.enfasis;
+  map.addSource('resalte', { type:'geojson', data: CONFIG.elementos });
+  map.addLayer({ id:'zona', type:'fill', source:'resalte',
+    filter:['==',['geometry-type'],'Polygon'],
+    paint:{ 'fill-color':rojo, 'fill-opacity':0.18 } });
+  map.addLayer({ id:'tramo-borde', type:'line', source:'resalte',
+    filter:['==',['geometry-type'],'LineString'],
+    layout:{ 'line-cap':'round', 'line-join':'round' },
+    paint:{ 'line-color':'#fff', 'line-width':9 } });
+  map.addLayer({ id:'tramo', type:'line', source:'resalte',
+    filter:['==',['geometry-type'],'LineString'],
+    layout:{ 'line-cap':'round', 'line-join':'round' },
+    paint:{ 'line-color':rojo, 'line-width':5 } });
+  map.addLayer({ id:'punto', type:'circle', source:'resalte',
+    filter:['==',['geometry-type'],'Point'],
+    paint:{ 'circle-radius':8, 'circle-color':rojo,
+            'circle-stroke-color':'#fff', 'circle-stroke-width':2.5 } });
+}
+
+function iniciar(e){
+  document.title = CONFIG.titulo;
+  document.getElementById('titulo').textContent = CONFIG.titulo;
+  document.getElementById('subtitulo').textContent = CONFIG.subtitulo;
+  document.getElementById('fuente').textContent = CONFIG.fuente;
+  document.getElementById('nota-titular').textContent = CONFIG.anotacion.titular;
+  document.getElementById('nota-texto').textContent = CONFIG.anotacion.texto;
+  document.getElementById('mapa').setAttribute('aria-label', CONFIG.titulo);
+
+  const map = new maplibregl.Map({
+    container: 'mapa',
+    style: 'https://tiles.openfreemap.org/styles/positron',
+    center: CONFIG.centro,
+    zoom: CONFIG.zoom,
+    cooperativeGestures: true   // evita que el mapa atrape el scroll en móvil
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass:false }), 'top-right');
+
+  const caja = document.getElementById('caja');
+  const nota = document.getElementById('nota');
+  const guia = document.getElementById('guia');
+  const linea = document.getElementById('linea');
+
+  function colocarNota(){
+    const ancho = caja.clientWidth;
+    if(ancho < 560){               // en móvil: nota fija arriba, sin línea
+      nota.style.left = '8px'; nota.style.top = '8px';
+      guia.style.display = 'none';
+      return;
+    }
+    guia.style.display = '';
+    const p = map.project(CONFIG.anotacion.punto);
+    const w = nota.offsetWidth, h = nota.offsetHeight;
+    let x = p.x + 36, y = p.y - h - 30;
+    if(x + w > ancho - 8) x = p.x - 36 - w;
+    if(y < 8) y = p.y + 30;
+    nota.style.left = x + 'px'; nota.style.top = y + 'px';
+    linea.setAttribute('x1', x < p.x ? x + w : x);
+    linea.setAttribute('y1', y < p.y ? y + h : y);
+    linea.setAttribute('x2', p.x);
+    linea.setAttribute('y2', p.y);
+  }
+
+  map.on('load', () => {
+    ajustarBase(map, e);
+    dibujarResalte(map, e);
+    colocarNota();
+  });
+  map.on('render', colocarNota);
+}
+
+cargarEstilo().then(e => { aplicarEstiloCSS(e); iniciar(e); });
+</script>
+</body>
+</html>
