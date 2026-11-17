@@ -1,14 +1,17 @@
 {
   "colores": {
-    "enfasis": "#C8102E",
+    "enfasis": "#C8202B",
+    "marca_azul": "#1F46A0",
+    "destaque": "#FFF200",
     "territorio": "#F2F2F0",
     "lineas": "#BDBDBD",
-    "agua": "#DCE9F2",
+    "agua": "#DCE6F2",
     "texto": "#1A1A1A"
   },
   "fuentes": {
-    "titulos": "Georgia, serif",
-    "etiquetas": "Arial, sans-serif"
+    "titulos": "'Barlow Semi Condensed', 'Arial Narrow', sans-serif",
+    "textos": "'Source Serif 4', Georgia, serif",
+    "etiquetas": "'Barlow', Arial, sans-serif"
   },
   "etiquetas": {
     "halo": "#FFFFFF",
