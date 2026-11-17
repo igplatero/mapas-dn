@@ -1,0 +1,17 @@
+{
+  "colores": {
+    "enfasis": "#C8102E",
+    "territorio": "#F2F2F0",
+    "lineas": "#BDBDBD",
+    "agua": "#DCE9F2",
+    "texto": "#1A1A1A"
+  },
+  "fuentes": {
+    "titulos": "Georgia, serif",
+    "etiquetas": "Arial, sans-serif"
+  },
+  "etiquetas": {
+    "halo": "#FFFFFF",
+    "grosor_halo": 3
+  }
+}
